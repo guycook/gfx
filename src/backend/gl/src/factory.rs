@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use libc;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::slice;
 
 use {gl, tex};
@@ -76,7 +76,7 @@ impl gfx::Output<R> for Output {
 
 /// GL resource factory.
 pub struct Factory {
-    share: Rc<Share>,
+    share: Arc<Share>,
     frame_handles: handle::Manager<R>,
 }
 
@@ -91,7 +91,7 @@ impl Clone for Factory {
 
 impl Factory {
     /// Create a new `Factory`.
-    pub fn new(share: Rc<Share>) -> Factory {
+    pub fn new(share: Arc<Share>) -> Factory {
         Factory {
             share: share,
             frame_handles: handle::Manager::new(),
@@ -178,7 +178,7 @@ impl d::Factory<R> for Factory {
             size: size,
         };
         self.init_buffer(name, &info);
-        self.share.handles.borrow_mut().make_buffer(name, info)
+        self.share.handles.write().unwrap().make_buffer(name, info)
     }
 
     fn create_buffer_static_raw(&mut self, data: &[u8], role: d::BufferRole)
@@ -192,7 +192,7 @@ impl d::Factory<R> for Factory {
         };
         self.init_buffer(name, &info);
         update_sub_buffer(&self.share.context, name, data.as_ptr(), data.len(), 0, role);
-        self.share.handles.borrow_mut().make_buffer(name, info)
+        self.share.handles.write().unwrap().make_buffer(name, info)
     }
 
     fn create_array_buffer(&mut self) -> Result<handle::ArrayBuffer<R>, d::NotSupported> {
@@ -203,7 +203,7 @@ impl d::Factory<R> for Factory {
                 gl.GenVertexArrays(1, &mut name);
             }
             info!("\tCreated array buffer {}", name);
-            Ok(self.share.handles.borrow_mut().make_array_buffer(name))
+            Ok(self.share.handles.write().unwrap().make_array_buffer(name))
         } else {
             error!("\tArray buffer creation unsupported, ignored");
             Err(d::NotSupported)
@@ -213,13 +213,13 @@ impl d::Factory<R> for Factory {
     fn create_shader(&mut self, stage: d::shade::Stage, code: &[u8])
                      -> Result<handle::Shader<R>, d::shade::CreateShaderError> {
         ::shade::create_shader(&self.share.context, stage, code)
-                .map(|sh| self.share.handles.borrow_mut().make_shader(sh, stage))
+                .map(|sh| self.share.handles.write().unwrap().make_shader(sh, stage))
     }
 
     fn create_program(&mut self, builder: &program::Builder<R>)
                       -> Result<handle::Program<R>, d::shade::CreateProgramError> {
         let frame_handles = &mut self.frame_handles;
-        let mut handles = self.share.handles.borrow_mut();
+        let mut handles = self.share.handles.write().unwrap();
         ::shade::create_program(&self.share.context, &self.share.capabilities, Some(&builder.targets[..]),
             builder.shaders.iter().map(|h| frame_handles.ref_shader(h)))
                 .map(|(name, info)| handles.make_program(name, info))
@@ -233,7 +233,7 @@ impl d::Factory<R> for Factory {
                 gl.GenFramebuffers(1, &mut name);
             }
             info!("\tCreated frame buffer {}", name);
-            Ok(self.share.handles.borrow_mut().make_frame_buffer(name))
+            Ok(self.share.handles.write().unwrap().make_frame_buffer(name))
         } else {
             error!("No framebuffer objects, can't make a new one!");
             Err(d::NotSupported)
@@ -246,7 +246,7 @@ impl d::Factory<R> for Factory {
             return Err(d::tex::SurfaceError::UnsupportedGamma)
         }
         tex::make_surface(&self.share.context, &info)
-            .map(|suf| self.share.handles.borrow_mut().make_surface(suf, info))
+            .map(|suf| self.share.handles.write().unwrap().make_surface(suf, info))
     }
 
     fn create_texture(&mut self, info: d::tex::TextureInfo) ->
@@ -264,7 +264,7 @@ impl d::Factory<R> for Factory {
         } else {
             tex::make_without_storage(gl, &info)
         };
-        name.map(|tex| self.share.handles.borrow_mut().make_texture(tex, info))
+        name.map(|tex| self.share.handles.write().unwrap().make_texture(tex, info))
     }
 
     fn create_sampler(&mut self, info: d::tex::SamplerInfo)
@@ -274,7 +274,7 @@ impl d::Factory<R> for Factory {
         } else {
             0
         };
-        self.share.handles.borrow_mut().make_sampler(sam, info)
+        self.share.handles.write().unwrap().make_sampler(sam, info)
     }
 
     fn update_buffer_raw(&mut self, buffer: &handle::RawBuffer<R>, data: &[u8],

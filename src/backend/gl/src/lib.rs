@@ -24,8 +24,8 @@ extern crate libc;
 extern crate gfx_gl as gl;
 extern crate gfx;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::RwLock;
+use std::sync::Arc;
 use gfx::device as d;
 use gfx::device::attrib::*;
 use gfx::device::draw::{Access, Gamma, Target};
@@ -163,14 +163,16 @@ pub fn create<F>(fn_proc: F) -> (Device, Factory) where
 pub struct Share {
     context: gl::Gl,
     capabilities: d::Capabilities,
-    handles: RefCell<handle::Manager<Resources>>,
+    handles: RwLock<handle::Manager<Resources>>,
     main_fbo: handle::FrameBuffer<Resources>,
 }
+
+unsafe impl Sync for Share { }
 
 /// An OpenGL device with GLSL shaders.
 pub struct Device {
     info: Info,
-    share: Rc<Share>,
+    share: Arc<Share>,
     frame_handles: handle::Manager<Resources>,
     max_resource_count: Option<usize>,
 }
@@ -202,10 +204,10 @@ impl Device {
         let main_fbo = handles.make_frame_buffer(0);
         Device {
             info: info,
-            share: Rc::new(Share {
+            share: Arc::new(Share {
                 context: gl,
                 capabilities: caps,
-                handles: RefCell::new(handles),
+                handles: RwLock::new(handles),
                 main_fbo: main_fbo,
             }),
             frame_handles: handle::Manager::new(),
@@ -638,7 +640,7 @@ impl gfx::Device for Device {
     fn cleanup(&mut self) {
         use gfx::device::handle::Producer;
         self.frame_handles.clear();
-        self.share.handles.borrow_mut().clean_with(&mut &self.share.context,
+        self.share.handles.write().unwrap().clean_with(&mut &self.share.context,
             |gl, v| unsafe { gl.DeleteBuffers(1, v) },
             |gl, v| unsafe { gl.DeleteVertexArrays(1, v) },
             |gl, v| unsafe { gl.DeleteShader(*v) },

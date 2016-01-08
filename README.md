@@ -1,3 +1,7 @@
+# Unsafe threaded fork
+
+This unsafe fork allows for passing of factories and resource handles between threads. It is not recommended for anyone to use.
+
 <!--
     Copyright 2014 The Gfx-rs Developers.
 
